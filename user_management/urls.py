@@ -11,6 +11,10 @@ urlpatterns = [
     path('create_profile/', CreateProfileView.as_view(), name='create_profile'),
     path('get_schools/', GetSchools.as_view(), name='get_schools'),
     path('get_school_class/', GetSchoolsClass.as_view(), name='get_school_class'),
-    path('get_route/', GetRoute.as_view(), name='get_route')
+    path('get_route/', GetRoute.as_view(), name='get_route'),
+
+
+    path('kids_view/', KidsView.as_view(), name='kids_view'),
+    path('kids_view/<int:pk>', KidsViewUpdate.as_view(), name="kids_update_view")
 ]
 

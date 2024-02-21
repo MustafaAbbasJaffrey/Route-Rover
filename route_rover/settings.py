@@ -130,11 +130,18 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': 'route_rover_api',
         'USER': 'postgres',
-        'PASSWORD': 'roOt@5',
+        'PASSWORD': 'password',
         'HOST': '127.0.0.1',
-        'PORT': '5432',
     }
 }
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',  # Assuming db.sqlite3 is in your project directory
+#     }
+# }
+
 
 
 # Password validation

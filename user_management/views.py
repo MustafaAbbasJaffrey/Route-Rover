@@ -19,12 +19,14 @@ from django_rest_authentication.authentication.views import UserRegisterView
 from django.contrib.auth.models import User
 from django.conf import settings
 from rest_framework.generics import CreateAPIView, ListCreateAPIView, RetrieveAPIView,ListAPIView
+from django.shortcuts import get_object_or_404
+
+
+
 
 class GuardianRegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     serializer_class = CreateProfileSerializer
-
-
 
 class SignInView(TokenObtainPairView):
     permission_classes = [AllowAny]
@@ -33,7 +35,6 @@ class SignInView(TokenObtainPairView):
 class SocialAuthenticationView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     serializer_class = SocialAuthSerializer
-
 
 class CreateProfileView(generics.ListCreateAPIView):
     permission_classes = [IsGuardian]
@@ -60,7 +61,7 @@ class CreateProfileView(generics.ListCreateAPIView):
         serializer.save()
 
     def get(self, request, *args, **kwargs):
-        resp = {'status':True,'status_code':status.HTTP_200_OK,'message':'Nutritionist license List','data':{}}
+        resp = {'status':True,'status_code':status.HTTP_200_OK,'message':'Create Profile List','data':{}}
         lst = []
         profile = Profile.objects.get(user = request.user)
 
@@ -137,3 +138,100 @@ class GetRoute(APIView):
 
         return Response(resp, status=status.HTTP_200_OK)
 
+
+## 21-Feb Work
+
+'''
+    Kids Route
+'''
+class KidsView(generics.ListCreateAPIView):
+    permission_classes = [IsGuardian] 
+    serializer_class = KidsSerializer
+
+    # Create New Kid
+    def create(self, request, *args, **kwargs):
+
+        kid_name = request.data['kid_name']
+        school = School.objects.get(pk=request.data['i_school'])
+        school_class = SchoolClass.objects.get(pk=request.data['i_class'])
+        rotue = Route.objects.get(pk=request.data['i_route'])
+        guardian_detail = GuardianDetails.objects.get(pk=request.user.profile.pk)
+        id_card_number = request.data['id_card_number']
+
+        kid = GuardianKids.objects.create(
+                                          kid_name=kid_name,
+                                          i_school=school, 
+                                          i_class=school_class, 
+                                          i_route=rotue, 
+                                          i_guardian_profile=guardian_detail,
+                                          id_card_number=id_card_number
+                                        )
+        
+        KidsIdCard.objects.create(i_kids=kid, card_media=request.data['card_media'])
+
+        # Default Response Data
+        self.resp = {}
+        self.resp['status']  = True 
+        self.resp['status_code'] = status.HTTP_200_OK
+        self.resp['message'] = "Kids has been created"
+        self.resp['data'] = {"data"  : request.data}
+        
+        return Response(self.resp, status=status.HTTP_201_CREATED)
+
+    def get(self, request, *args, **kwargs):
+
+        self.resp = {}
+        kids = []
+
+        # Creating Dict By using Kids Data
+        for kid in GuardianKids.objects.filter(i_guardian_profile__i_profile = request.user.profile.pk):
+            data = {
+                "id_card_number":kid.id_card_number,
+                "kid_id":kid.pk,
+                "kid_name" : kid.kid_name,
+                "route": kid.i_route.route_name,
+                "school":kid.i_school.school_name,
+                "class":kid.i_class.class_name,
+                "guardian":kid.i_guardian_profile.i_profile.user.first_name,
+                "kid_image":None,
+                # "kid_image":kid.kid_image,
+            }
+            kids.append(data)
+
+        # Default Response Data
+        self.resp['status']  = True 
+        self.resp['status_code'] = status.HTTP_200_OK
+        self.resp['message'] = "Kids Data"
+        self.resp['data'] = {"data"  : kids}
+
+        return Response(self.resp, status=status.HTTP_200_OK)
+
+# Retrive Delete are working Correctly 
+# Update is remaining to test
+class KidsViewUpdate(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsGuardian] 
+    serializer_class = KidsUpdateSerializer
+    queryset = GuardianKids.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        
+        kid = get_object_or_404(GuardianKids, pk=kwargs['pk'])
+        kid_id_card = get_object_or_404(KidsIdCard, i_kids__pk=kid.pk)
+
+        data= {
+                "id":kid.id,
+                "kid_name":kid.kid_name,
+                "class":kid.i_class.class_name,
+                "school":kid.i_school.school_name,
+                "route":kid.i_route.route_name,
+                "id_card_number":kid.id_card_number,
+                # "kid_image":kid_id_card.card_media
+            }
+
+        self.resp = {}
+        self.resp['status']  = True 
+        self.resp['status_code'] = status.HTTP_200_OK
+        self.resp['message'] = "Kids Data"
+        self.resp['data'] = data
+
+        return Response(self.resp, status=status.HTTP_200_OK)

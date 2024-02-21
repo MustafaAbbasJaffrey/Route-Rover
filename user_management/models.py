@@ -59,7 +59,6 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
-
 class Profile(models.Model):
 
     # user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name = "profile_user")
@@ -96,13 +95,13 @@ class Profile(models.Model):
     class Meta:
         db_table = 'profile'
 
-
 class GuardianDetails(models.Model):
     i_profile = models.ForeignKey(Profile, on_delete = models.CASCADE)
     home_address = models.CharField(max_length = 512)
 
     def __str__(self):
         return '%s' % self.i_profile.user.email
+    
     class Meta:
         db_table = 'guardian_details'
     
@@ -157,7 +156,6 @@ class GuardianKids(models.Model):
     class Meta:
         db_table = 'guardian_kids'
     
-
 class KidsIdCard(models.Model):
     i_kids = models.ForeignKey(GuardianKids, on_delete = models.CASCADE)
     card_media = models.FileField(max_length=256, upload_to = save_kids_card, null=True, blank=True)
@@ -176,7 +174,6 @@ class KidsIdCard(models.Model):
     class Meta:
         db_table = 'kids_card'
 
-
 class Language(models.Model):
     name = models.CharField(max_length=100)
     added_by = models.ForeignKey(
@@ -194,7 +191,6 @@ class Language(models.Model):
     class Meta:
         ordering = ['name']
         db_table = 'all_languages'
-
 
 class GlobalConfiguration(models.Model):
     name = models.CharField(max_length=36)

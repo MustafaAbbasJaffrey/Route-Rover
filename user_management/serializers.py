@@ -7,6 +7,7 @@ from rest_framework import status
 import magic
 from .utils import decode_base64_file, get_model_objects, get_profiles
 from user_management.countries import COUNTRY_CHOICES
+from .models import GuardianKids
 
 from .utils import get_user_roles, validate_phone_number
 from django.db import transaction
@@ -18,25 +19,35 @@ import re
 
 class CreateProfileSerializer(MainRegisterSerializer):
     status = serializers.BooleanField(read_only=True)
-    # status_code = serializers.IntegerField(read_only=True,default = status.HTTP)
-    data = serializers.DictField(read_only=True,default = {})
+    data = serializers.DictField(read_only=True, default = {})
     message = serializers.CharField(read_only=True)
+
+    # status_code = serializers.IntegerField(read_only=True,default = status.HTTP)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # This is for response!
         self.resp = {'status' : False, 'data':None, 'message':None, 'status_code':status.HTTP_400_BAD_REQUEST}
-        self.fields['role'] = serializers.ChoiceField(choices=get_user_roles(),write_only=True, required=True)
+        
+        
+        # ----------- This is due to inheritance -------------
         self.fields['full_name'] = self.fields.pop('first_name')
 
+        # ---------- Cutomer serializer --------------- #
+        self.fields['role'] = serializers.ChoiceField(choices=get_user_roles(),write_only=True, required=True)
         self.fields['phone_number'] = serializers.CharField(write_only=True, required=True)
+        self.fields['main_image'] = serializers.FileField(write_only=True, required=False)
+
         # self.fields['country_short_form'] = serializers.CharField(write_only=True, required=True)
         # self.fields['full_name'] = self.fields.pop('first_name')
-        self.fields['main_image'] = serializers.FileField(write_only=True, required=False)
         # self.fields['country_short_form'] = serializers.CharField(write_only=True, required=True)
         
 
     def validate(self, attrs):
+        # ------ This validate method from parent class -------
         parent_attr = super().validate(attrs)
+
         if parent_attr['valid']:
             errors = None
             
@@ -66,7 +77,9 @@ class CreateProfileSerializer(MainRegisterSerializer):
         return attrs
     
     def create(self, validated_data):
+        # ------ This create method from parent class -------
         parent_create = super().create(validated_data)
+
         if validated_data['valid'] == True:
             with transaction.atomic():
                 print(parent_create,"+++ create")
@@ -85,10 +98,15 @@ class CreateProfileSerializer(MainRegisterSerializer):
                 # parent_create['data']['firestore_id'] = firestore_id
                 # parent_create['data']['firestore_token'] = firestore_token
 
-                del parent_create['data']['username']
-                del parent_create['data']['first_name']
-                del parent_create['data']['pk']
+                # ---------- This try catch will be added by me because usename is not diefine
+                try:
+                    del parent_create['data']['username']
+                    del parent_create['data']['first_name']
+                    del parent_create['data']['pk']
+                except:
+                    pass
                 
+
                 self.resp = {
                     'data':parent_create['data'],
                     'message':parent_create['message'],
@@ -103,11 +121,12 @@ class CreateProfileSerializer(MainRegisterSerializer):
 
 class UserCustomTokenObtainPairSerializer(MyTokenObtainPairSerializer):
     token_class = RefreshToken
-    
+
     status = serializers.BooleanField(read_only=True)
-    # status_code = serializers.IntegerField(read_only=True,default = status.HTTP)
     data = serializers.DictField(read_only=True,default = {})
     message = serializers.CharField(read_only=True)
+
+    # status_code = serializers.IntegerField(read_only=True,default = status.HTTP)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -247,6 +266,7 @@ class CreateProfileViewSerializer(serializers.Serializer):
     status = serializers.BooleanField(read_only=True)
     message = serializers.CharField(read_only=True,default=None)
     data = serializers.DictField(read_only=True,default={})
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.resp = {'status' : False}
@@ -347,23 +367,34 @@ class CreateProfileViewSerializer(serializers.Serializer):
         print('attrs ', attrs)
         return attrs
     
+
     def create(self, validated_data):
         if validated_data['valid'] == True:
-            # print('validated_data ', validated_data)
             kids = validated_data.get('kids', [])
             main_image = decode_base64_file(validated_data['main_image'])
-            for kid in kids:
-                school_obj = School.objects.get(pk = kid['school_id'])
-                class_obj = SchoolClass.objects.get(pk = kid['class_id'])   
-                route_obj = Route.objects.get(pk = kid['route_id'])
-                kids_image = decode_base64_file(kid['kid_image'])
-                print("Kids: ", kids)
-                with transaction.atomic():
+            
+            # Atomic Transaction
+            # If one is fail all are fails 
+            # not a even transaction occur
+            with transaction.atomic():
+
+                # New Guardian Detail Creation
+                guardian_profile = GuardianDetails.objects.create(i_profile = self.user.profile,
+                                                                    home_address = validated_data['home_address'])
+
+                # This loop is for multipule kids insertion
+                for kid in kids:
+                    school_obj = School.objects.get(pk = kid['school_id'])
+                    class_obj = SchoolClass.objects.get(pk = kid['class_id'])   
+                    route_obj = Route.objects.get(pk = kid['route_id'])
+                    kids_image = decode_base64_file(kid['kid_image'])
+                    
                     profile_obj = Profile.objects.get(user = self.user)
                     profile_obj.main_image = main_image
                     profile_obj.phone_number = validated_data['phone_number']
                     profile_obj.user.first_name = validated_data['full_name']
-                    guardian_profile = GuardianDetails.objects.create(i_profile = self.user.profile,home_address = validated_data['home_address'])
+
+                    # Guardian kids insertions
                     g=GuardianKids.objects.create(
                         i_guardian_profile = guardian_profile,
                         i_school = school_obj,
@@ -373,25 +404,63 @@ class CreateProfileViewSerializer(serializers.Serializer):
                         kid_name = kid['kid_name'],
                         id_card_number = kid['id_card_no']
                     )
-                    id_card = validated_data.get('kid_id_card', [])
-                    print('id_card ', id_card)
+
+                    # Id Card Insertion
+                    # At this time we are assuming this is for multiple Id_card (one or many) related to one student
+                    # But we can change it in future
+                    id_card = kid['kid_id_card']
                     for card in id_card:
-                        card_image = decode_base64_file(card['card_image'])
-                        id_card_obj = KidsIdCard.objects.create(
-                            i_kids = g,
-                            card_media = card_image
-                            )
+                        card_image = decode_base64_file(card)
+                        KidsIdCard.objects.create(i_kids = g,card_media = card_image)
 
 
-                    
+            # Remove Valid From validate_Data        
+            validated_data.pop("valid")
+
+            # Resposne if data is valid
             self.resp["status"] = True
             self.resp["message"] = "Profile Created"
             self.resp['status_code'] = status.HTTP_201_CREATED
-            # validated_data.pop("valid")
-            # self.resp["data"] = validated_data
+            self.resp["data"] = validated_data
         else:
+            # Response When data is not valid
             self.resp["message"] = self.resp.pop("error")   
             self.resp["status_code"] = status.HTTP_400_BAD_REQUEST
             self.resp["status"] = False
             self.resp["data"] = {}
         return self.resp
+    
+
+class KidsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=GuardianKids
+        fields = "__all__"
+
+
+
+
+class SchoolSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=School
+        fields=['school_name']
+
+class ClassSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=SchoolClass
+        fields=['class_name']
+
+class RouteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Route
+        fields=['route_name']
+
+class KidsUpdateSerializer(serializers.ModelSerializer):
+    i_school = SchoolSerializer()
+    i_class = ClassSerializer()
+    i_route = RouteSerializer()
+
+    class Meta:
+        model=GuardianKids
+        fields = "__all__"
+
+    
