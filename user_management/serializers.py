@@ -16,7 +16,18 @@ from .models import *
 from django.core.files import File
 import re
 
+class UserSerialier(serializers.ModelSerializer):
+    class Meta:
+        model=User
+        fields="__all__"
 
+
+class ProfileSerializer(serializers.ModelSerializer):
+    user = UserSerialier()
+    class Meta:
+        model=Profile
+        fields="__all__"
+    
 class CreateProfileSerializer(MainRegisterSerializer):
     status = serializers.BooleanField(read_only=True)
     data = serializers.DictField(read_only=True, default = {})
@@ -372,15 +383,22 @@ class CreateProfileViewSerializer(serializers.Serializer):
         if validated_data['valid'] == True:
             kids = validated_data.get('kids', [])
             main_image = decode_base64_file(validated_data['main_image'])
-            
             # Atomic Transaction
             # If one is fail all are fails 
             # not a even transaction occur
             with transaction.atomic():
-
+                
                 # New Guardian Detail Creation
                 guardian_profile = GuardianDetails.objects.create(i_profile = self.user.profile,
                                                                     home_address = validated_data['home_address'])
+                
+                # Update User Profile
+                profile_obj = Profile.objects.get(user = self.user)
+                profile_obj.main_image = main_image
+                profile_obj.phone_number = validated_data['phone_number']
+                profile_obj.save()
+                profile_obj.user.first_name = validated_data['full_name']
+                profile_obj.user.save()
 
                 # This loop is for multipule kids insertion
                 for kid in kids:
@@ -389,10 +407,6 @@ class CreateProfileViewSerializer(serializers.Serializer):
                     route_obj = Route.objects.get(pk = kid['route_id'])
                     kids_image = decode_base64_file(kid['kid_image'])
                     
-                    profile_obj = Profile.objects.get(user = self.user)
-                    profile_obj.main_image = main_image
-                    profile_obj.phone_number = validated_data['phone_number']
-                    profile_obj.user.first_name = validated_data['full_name']
 
                     # Guardian kids insertions
                     g=GuardianKids.objects.create(
@@ -438,6 +452,11 @@ class KidsSerializer(serializers.ModelSerializer):
 
 
 
+'''
+    We need to display three models data into one
+    That's why we use nested serilizer approch
+    School, Class and Route Data is shown along with Guardian kid data
+'''
 
 class SchoolSerializer(serializers.ModelSerializer):
     class Meta:
@@ -463,4 +482,27 @@ class KidsUpdateSerializer(serializers.ModelSerializer):
         model=GuardianKids
         fields = "__all__"
 
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    new_password_confirmation = serializers.CharField(required=True)
+
+    def validate(self, data):
+
+        user = self.context['request'].user
+        if not user.check_password(data['old_password']):
+            raise serializers.ValidationError({'old_password': 'Wrong password.'})
+
+        if data['new_password'] != data['new_password_confirmation']:
+            raise serializers.ValidationError({'new_password_confirmation': 'Passwords do not match.'})
+
+        return data
+
+    def update(self, instance, validated_data):
+
+        instance.set_password(validated_data['new_password'])
+        instance.save()
+        return instance
     
+

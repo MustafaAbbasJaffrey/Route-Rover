@@ -48,6 +48,7 @@ def get_model_objects(app_label, model_name, list_ids):
 
 
 def decode_base64_file(base64_file):
+
     # Remove the base64 prefix
     if base64_file.startswith('data:'):
         data = base64_file.split(';base64,', 1)[1]

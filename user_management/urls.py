@@ -15,6 +15,9 @@ urlpatterns = [
 
 
     path('kids_view/', KidsView.as_view(), name='kids_view'),
-    path('kids_view/<int:pk>', KidsViewUpdate.as_view(), name="kids_update_view")
+    path('kids_view/<int:pk>', KidsViewUpdate.as_view(), name="kids_update_view"),
+    path('profile/', ProfileView.as_view(), name="profile"),
+    path('ChangePasswordView/', ChangePasswordView.as_view(), name="change_password"),
 ]
+
 
