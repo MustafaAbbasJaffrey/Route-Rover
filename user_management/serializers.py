@@ -506,3 +506,15 @@ class ChangePasswordSerializer(serializers.Serializer):
         return instance
     
 
+class DriveProfileSerializer(serializers.ModelSerializer):
+    i_profile = ProfileSerializer()
+
+    class Meta:
+        model = DriverDetails
+        fields="__all__"
+
+
+class DriverAttendenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DriverAttendance
+        fields="__all__"

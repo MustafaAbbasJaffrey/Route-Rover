@@ -95,6 +95,24 @@ class Profile(models.Model):
     class Meta:
         db_table = 'profile'
 
+class DriverDetails(models.Model):
+    i_profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="d_profile")
+    license_number = models.CharField(max_length=100)
+    license_validity = models.CharField(max_length=100)
+    vehicle_make = models.CharField()
+    vehicle_model = models.CharField()
+    vehicle_registration = models.CharField()
+    home_address = models.CharField(max_length=255)
+    authorized_schools = models.ForeignKey('School', on_delete=models.CASCADE)
+    assign_route = models.ForeignKey('Route', on_delete=models.CASCADE)
+
+    def __str__(self):
+        return '%s' % self.i_profile.user
+    
+    class Meta:
+        db_table = 'driver_details'
+    
+
 class GuardianDetails(models.Model):
     i_profile = models.ForeignKey(Profile, on_delete = models.CASCADE)
     home_address = models.CharField(max_length = 512)
@@ -201,3 +219,23 @@ class GlobalConfiguration(models.Model):
 
     class Meta:
         db_table = 'global_configuration'
+
+
+class DriverAttendance(models.Model):
+    driver = models.ForeignKey(DriverDetails, on_delete=models.CASCADE, related_name="driver_attendance")
+    time_in = models.DateTimeField(null=True, blank=True)
+    time_out = models.DateTimeField(null=True, blank=True)
+    current_date = models.DateField()
+
+# Given to Yasir because he is making complaint part
+class Complaints(models.Model):
+    STATUS = [
+        (0, "PENDING"),
+        (1, "IN PROGESS"),
+        (2, "COMPLETED")
+    ]
+
+    reported_by = models.ForeignKey(GuardianDetails, on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    status = models.IntegerField(choices=STATUS, default=0)

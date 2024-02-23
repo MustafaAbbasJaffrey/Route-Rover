@@ -12,6 +12,8 @@ from .models import Profile
 from django.db.models import Q
 from rest_framework import status
 from django.db.models import Sum
+from datetime import datetime
+
 
 
 def get_profiles(many = False, query = None, **kwargs):
@@ -84,3 +86,20 @@ def validate_phone_number(value, country_short_form):
     except phonenumbers.NumberParseException:
         return {'success':False, 'message':'Invalid phone number format or country Code.'}
     
+
+
+def compare_dates(date1, date2):
+    format = '%Y-%m-%d'
+    
+    try:
+        datetime1 = datetime.strptime(date1, format)
+        datetime2 = datetime.strptime(date2, format)
+    except ValueError:
+        return -1
+
+    if datetime1 == datetime2:
+        return 0
+    elif datetime1 > datetime2:
+        return -1
+    else:
+        return 0

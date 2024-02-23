@@ -17,7 +17,10 @@ urlpatterns = [
     path('kids_view/', KidsView.as_view(), name='kids_view'),
     path('kids_view/<int:pk>', KidsViewUpdate.as_view(), name="kids_update_view"),
     path('profile/', ProfileView.as_view(), name="profile"),
-    path('ChangePasswordView/', ChangePasswordView.as_view(), name="change_password"),
+    path('changePasswordView/', ChangePasswordView.as_view(), name="change_password"),
+    path('driver_profile/', DrivedDetailView.as_view(), name="driver_detail"),
+    path('time_in/', TimeInView.as_view(), name="time_in"),
+    path('time_out/', TimeOutView.as_view(), name="time_out"),
 ]
 
 

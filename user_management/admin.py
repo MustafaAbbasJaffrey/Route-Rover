@@ -36,3 +36,15 @@ class GuardianKidsAdmin(admin.ModelAdmin):
 @admin.register(KidsIdCard)
 class KidsIdCardAdmin(admin.ModelAdmin):
     list_display = ['i_kids', 'card_media']
+
+@admin.register(DriverDetails)
+class DriverDetailAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(Complaints)
+class ComplaintsAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(DriverAttendance)
+class DriverAttendanceAdmin(admin.ModelAdmin):
+    pass

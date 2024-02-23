@@ -21,6 +21,8 @@ from django.conf import settings
 from rest_framework.generics import CreateAPIView, ListCreateAPIView, RetrieveAPIView,ListAPIView, RetrieveUpdateAPIView
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
+from datetime import datetime
+
 
 
 
@@ -382,6 +384,8 @@ class ChangePasswordView(APIView):
         # Generate a new refresh token
         refresh = RefreshToken.for_user(request.user)
 
+        
+        
         resp = Response({ 'status': True,
                           'status_code':status.HTTP_200_OK,
                           "message": "Password changed successfully",
@@ -389,3 +393,103 @@ class ChangePasswordView(APIView):
                              status=status.HTTP_200_OK)
 
         return resp
+    
+
+class DrivedDetailView(CreateAPIView):
+    # Its Allow Any for All for just testing purpose
+    # But its allow only for Admin
+    permission_classes = [AllowAny]
+    serializer_class = DriveProfileSerializer
+    queryset = DriverDetails.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        
+        # Its create three models data
+        # 1. User
+        # 2. Profile
+        # 3. Drvier Detail
+        with transaction.atomic():
+            user = ""
+            try:
+                user_data = {}
+                user_data['first_name'] = request.data['full_name']
+                user_data['username'] = request.data['email_address']
+                user_data['email'] = request.data['email_address']
+                user = User(**user_data)
+                user.set_password(request.data['password'])
+                request.data.pop('password')
+                user.save()
+            except Exception as e:
+                print(e)
+                return Response({"status": False, "status_code":status.HTTP_403_FORBIDDEN, "message": "Email address already Registered", "data":""})
+
+            profile_data = {}
+            profile_data['user'] = user
+            profile_data['role'] = Role.objects.get(pk=1)
+            profile_data['join_date'] = request.data['date_of_employement']
+            profile_data['phone_number'] = request.data['phone_number']
+            profile_data['main_image'] = decode_base64_file(request.data['main_image'])
+            profile = Profile.objects.create(**profile_data)
+
+            driver_data = {}
+            driver_data['i_profile'] = profile
+            driver_data['license_number'] = request.data['license_number']
+            driver_data['license_validity'] = request.data['license_validity']
+            driver_data['vehicle_make'] = request.data['vehicle_make']
+            driver_data['vehicle_model'] = request.data['vehicle_model']
+            driver_data['vehicle_registration'] = request.data['vehicle_registration']
+            driver_data['home_address'] = request.data['home_address']
+            driver_data['authorized_schools'] = School.objects.get(pk=request.data['authorized_schools'])
+            driver_data['assign_route'] = Route.objects.get(pk=request.data['assign_route'])
+
+            DriverDetails.objects.create(**driver_data)
+
+            request.data['main_image'] = profile.get_main_image()
+
+        self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": "Driver has been created", "data":request.data}
+
+        return Response(self.resp, status=status.HTTP_201_CREATED)
+
+
+class TimeInView(CreateAPIView):
+    permission_classes = [IsDriver]
+    serializer_class = DriveProfileSerializer
+    queryset = DriverAttendance.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        current_date = DriverAttendance.objects.all().last()
+
+        time_in = request.data['time_in']
+        date_only = datetime.strptime(time_in, "%Y-%m-%d %H:%M:%S").date()
+        data = ""
+        if current_date == None or compare_dates(str(date_only), str(current_date.current_date)) == -1:
+            driver = DriverDetails.objects.get(i_profile=request.user.profile)
+            data = DriverAttendance.objects.create(driver=driver, time_in=time_in, current_date=date_only)
+        else:
+            self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"Driver is already time in", "data":""}
+            return Response(self.resp, status=status.HTTP_200_OK)
+        
+
+
+        self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Time in at {time_in} on {date_only}", "data":""}
+        return Response(self.resp, status=status.HTTP_200_OK)
+
+
+class TimeOutView(CreateAPIView):
+    permission_classes = [IsDriver]
+    serializer_class = DriveProfileSerializer
+    queryset = DriverAttendance.objects.all()
+
+    def create(self, request, *args, **kwargs):
+
+        time_out = request.data['time_out']
+        date_only = datetime.strptime(time_out, "%Y-%m-%d %H:%M:%S").date()
+        if DriverAttendance.objects.filter(current_date=date_only).exists():
+            driver = DriverDetails.objects.get(i_profile=request.user.profile)
+            data = DriverAttendance.objects.update(driver=driver, time_out=time_out)
+        else:
+            self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"You have to Time In First", "data":""}
+            return Response(self.resp, status=status.HTTP_200_OK)
+
+        self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Time out at {time_out} on {date_only}", "data":""}
+        return Response(self.resp, status=status.HTTP_200_OK)
