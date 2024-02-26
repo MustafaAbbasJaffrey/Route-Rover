@@ -98,7 +98,7 @@ def compare_dates(date1, date2):
         return -1
 
     if datetime1 == datetime2:
-        return 0
+        return 1
     elif datetime1 > datetime2:
         return -1
     else:

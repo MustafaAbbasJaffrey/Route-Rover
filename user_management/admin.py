@@ -47,4 +47,4 @@ class ComplaintsAdmin(admin.ModelAdmin):
 
 @admin.register(DriverAttendance)
 class DriverAttendanceAdmin(admin.ModelAdmin):
-    pass
+    list_display=['driver', 'time_in', 'time_out']

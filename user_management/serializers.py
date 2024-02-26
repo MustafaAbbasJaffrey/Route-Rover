@@ -518,3 +518,8 @@ class DriverAttendenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = DriverAttendance
         fields="__all__"
+
+class GetDriverAttendenceSerialization(serializers.ModelSerializer):
+    class Meta:
+        model = DriverAttendance
+        fields="__all__" 

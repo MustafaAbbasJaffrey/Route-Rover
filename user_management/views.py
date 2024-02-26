@@ -21,7 +21,7 @@ from django.conf import settings
 from rest_framework.generics import CreateAPIView, ListCreateAPIView, RetrieveAPIView,ListAPIView, RetrieveUpdateAPIView
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 
@@ -450,46 +450,246 @@ class DrivedDetailView(CreateAPIView):
 
         return Response(self.resp, status=status.HTTP_201_CREATED)
 
-
+'''
+    Time In View
+    This View is Responsible for Driver Time In
+    If driver want to time in 2 time in a single day
+    This view won't allow it.
+'''
 class TimeInView(CreateAPIView):
     permission_classes = [IsDriver]
     serializer_class = DriveProfileSerializer
     queryset = DriverAttendance.objects.all()
 
     def create(self, request, *args, **kwargs):
-        current_date = DriverAttendance.objects.all().last()
+
+        # Fetch last Record of Driver Attendance Detail
+        driver = DriverDetails.objects.get(i_profile=request.user.profile)
+        last_date = DriverAttendance.objects.filter(driver=driver).last()
 
         time_in = request.data['time_in']
         date_only = datetime.strptime(time_in, "%Y-%m-%d %H:%M:%S").date()
-        data = ""
-        if current_date == None or compare_dates(str(date_only), str(current_date.current_date)) == -1:
-            driver = DriverDetails.objects.get(i_profile=request.user.profile)
-            data = DriverAttendance.objects.create(driver=driver, time_in=time_in, current_date=date_only)
+
+        # Check either its first time for client to insert time_in or driver want to insert old date time_in
+        if last_date == None or compare_dates(str(date_only), str(last_date.current_date)) == -1:
+            DriverAttendance.objects.create(driver=driver, time_in=time_in, current_date=date_only)
         else:
-            self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"Driver is already time in", "data":""}
-            return Response(self.resp, status=status.HTTP_200_OK)
-        
+            # Thi condition is because we have to pass two different response to the client
+            if compare_dates(str(date_only), str(last_date.current_date)) == 1:
+                self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"Driver is already time in", "data":""}
+            else:
+                self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"Date has been passed", "data":""}
+            return Response(self.resp, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
-
+        # Successfully time_in
         self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Time in at {time_in} on {date_only}", "data":""}
         return Response(self.resp, status=status.HTTP_200_OK)
 
-
+'''
+    Time Out View
+    This view is responsible for driver time out
+    If driver want to insert time out when they are not time in
+    This view wont allow it
+'''
 class TimeOutView(CreateAPIView):
     permission_classes = [IsDriver]
     serializer_class = DriveProfileSerializer
     queryset = DriverAttendance.objects.all()
 
     def create(self, request, *args, **kwargs):
+        driver = DriverDetails.objects.get(i_profile=request.user.profile)
 
         time_out = request.data['time_out']
         date_only = datetime.strptime(time_out, "%Y-%m-%d %H:%M:%S").date()
-        if DriverAttendance.objects.filter(current_date=date_only).exists():
-            driver = DriverDetails.objects.get(i_profile=request.user.profile)
-            data = DriverAttendance.objects.update(driver=driver, time_out=time_out)
+
+        # Check if driver has time_in ot not
+        if DriverAttendance.objects.filter(Q(driver=driver), Q(current_date=date_only)).exists():
+            today_attendance = DriverAttendance.objects.filter(driver=driver, current_date=date_only)
+            today_attendance.update(time_out=time_out)
         else:
             self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"You have to Time In First", "data":""}
-            return Response(self.resp, status=status.HTTP_200_OK)
+            return Response(self.resp, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
         self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Time out at {time_out} on {date_only}", "data":""}
         return Response(self.resp, status=status.HTTP_200_OK)
+
+'''
+    Get Attendance View
+    This View is responsible for multiple work  
+    If no query parameter pass it return current Year Record
+    If month query parameter pass it return selected month and current year record
+    if year query parameter pass it will return selected year record
+    if month and year both pased as a query parameter it will return selectd month and seleted year record
+'''
+class GetDriverAttendence(ListAPIView):
+    permission_classes = [IsDriver]
+    serializer_class = GetDriverAttendenceSerialization
+    queryset = DriverAttendance.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        
+        # If there is some query parameter is available in url or not
+        if ('month' in request.query_params and 'year' in request.query_params) or 'month' in request.query_params:
+
+            # Get query Parameter from request object if its not available then its send None
+            selected_month = int(request.query_params.get('month'))
+            selected_year = int(request.query_params.get('year')) if request.query_params.get('year') != None else None
+
+            # Fetch Month and year record
+            data = self.attendance_for_month(month=selected_month, year=selected_year)
+
+            self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Driver Attendance", "data":data}
+            return Response(self.resp, status=status.HTTP_200_OK)
+        elif 'last' in request.query_params:
+            data = self.attendance_limit(int(request.query_params.get('last')))
+
+            self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Last {request.query_params.get('last')} Driver Attendance", "data":data}
+            return Response(self.resp, status=status.HTTP_200_OK)
+
+        present = 0
+        absent = 0
+
+        data = {}
+        data['calenader'] = {}
+        
+        # Check there is any query parameter pass from client or not if not its send current year
+        selected_year = int(request.query_params.get('year')) if request.query_params.get('year') != None else datetime.now().year
+        start_date = datetime(selected_year, 1, 1)
+        end_date = datetime(selected_year, 12, 31)
+
+        # This while loop is responsible to genereate whole record (month and year)
+        current_date = start_date
+        while current_date <= end_date:
+            formatted_date = current_date.strftime("%Y-%m-%d")
+
+            # date is greather than current date -> status will be empty
+            if current_date > datetime.today():
+                data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
+            else:
+                # If there is saturday or sunday status will be holiday
+                if current_date.weekday() == 5 or current_date.weekday() == 6:
+                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Holiday"}
+                else:
+                    # if date is previous date -> status will be absent
+                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
+                    absent += 1
+            
+            current_date += timedelta(days=1)
+
+        # Get attendance record from database
+        driver = DriverDetails.objects.get(i_profile=request.user.profile)
+        attendance = DriverAttendance.objects.filter(driver=driver)
+
+        # attach DB record in current table which is genereated above
+        for i in list(attendance):
+            if str(i.current_date) in data['calenader']:
+                data['calenader'][str(i.current_date)] = {"time_in":i.time_in, "time_out":i.time_out, "status":"Present"}
+                present += 1
+
+        # calcualte Present and absent Record
+        data['Attendance']= {
+                "Present":present,
+                "Absent":absent         
+            }
+
+        self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Driver Attendance", "data":data}
+        return Response(self.resp, status=status.HTTP_200_OK)
+    
+
+    '''
+        This method is responsible to generate custom calendar to the client
+        By passing month and year as a parameter in this method
+        This method wont be called if month is not in query parameters
+    '''
+    def attendance_for_month(self, month=None, year=None):
+        absent = 0
+        present = 0
+
+        # If one of the query parameter is not passed in to this method it will because current month and current year
+        if month is None:
+            month = datetime.now().month
+        if year is None:
+            year = datetime.now().year
+
+        # it will calculate how many days in particular time which is give by client
+        num_days_in_month = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day
+
+        data = {}
+        data['calenader'] = {}
+        for day in range(1, num_days_in_month + 1):
+            date = datetime(year, month, day)
+            formatted_date = date.strftime("%Y-%m-%d")
+
+            # date is greather than current date -> status will be empty
+            if date.date() > datetime.today().date():
+                data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
+            else:
+                # If there is saturday or sunday status will be holiday
+                if date.weekday() == 5 or date.weekday() == 6:
+                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Holiday"}
+                else:
+                    # if date is previous date -> status will be absent
+                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
+                    absent += 1
+
+        # Get attendance record from database
+        driver = DriverDetails.objects.get(i_profile=self.request.user.profile)
+        attendance = DriverAttendance.objects.filter(driver=driver)
+
+        # attach DB record in current table which is genereated above
+        for i in list(attendance):
+            if str(i.current_date) in data['calenader']:
+                data['calenader'][str(i.current_date)] = {"time_in":i.time_in, "time_out":i.time_out, "status":"Present"}
+                present += 1
+
+        # calcualte Present and absent Record
+        data['Attendance']= {
+                "Present":present,
+                "Absent":absent         
+            }
+
+        return data
+    
+
+    '''
+        This method in responsible send last (given by client as a query parameter) Attendance record
+    '''
+    def attendance_limit(self, limit):
+        data = {}
+        data['calenader'] = {}
+
+        present = 0
+        absent = 0
+
+        current_date = datetime.today()
+        while len(data["calenader"]) < int(limit):
+            formatted_date = current_date.strftime("%Y-%m-%d")
+
+            if current_date > datetime.today():
+                data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
+            else:
+                # If there is saturday or sunday it will not include in the record
+                if current_date.weekday() == 5 or current_date.weekday() == 6:
+                    pass
+                else:
+                    # if date is previous date -> status will be absent
+                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
+                    absent += 1
+            current_date+=timedelta(days=-1)
+        
+        # Get attendance record from database
+        driver = DriverDetails.objects.get(i_profile=self.request.user.profile)
+        attendance = DriverAttendance.objects.filter(driver=driver)
+
+        # attach DB record in current table which is genereated above
+        for i in list(attendance):
+            if str(i.current_date) in data['calenader']:
+                data['calenader'][str(i.current_date)] = {"time_in":i.time_in, "time_out":i.time_out, "status":"Present"}
+                present += 1
+
+        data['Attendance']= {
+            "Present":present,
+            "Absent":absent         
+        }
+        return data
+        

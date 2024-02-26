@@ -21,6 +21,7 @@ urlpatterns = [
     path('driver_profile/', DrivedDetailView.as_view(), name="driver_detail"),
     path('time_in/', TimeInView.as_view(), name="time_in"),
     path('time_out/', TimeOutView.as_view(), name="time_out"),
+    path('get_attendence/', GetDriverAttendence.as_view(), name="driver_attendence"),
 ]
 
 
