@@ -583,7 +583,9 @@ class GetDriverAttendence(ListAPIView):
         # attach DB record in current table which is genereated above
         for i in list(attendance):
             if str(i.current_date) in data['calenader']:
-                data['calenader'][str(i.current_date)] = {"time_in":i.time_in, "time_out":i.time_out, "status":"Present"}
+                time_in = get_time(i.time_in)
+                time_out = get_time(i.time_out)
+                data['calenader'][str(i.current_date)] = {"time_in":time_in, "time_out":time_out, "status":"Present"}
                 present += 1
 
         # calcualte Present and absent Record
@@ -639,7 +641,9 @@ class GetDriverAttendence(ListAPIView):
         # attach DB record in current table which is genereated above
         for i in list(attendance):
             if str(i.current_date) in data['calenader']:
-                data['calenader'][str(i.current_date)] = {"time_in":i.time_in, "time_out":i.time_out, "status":"Present"}
+                time_in = get_time(i.time_in)
+                time_out = get_time(i.time_out)
+                data['calenader'][str(i.current_date)] = {"time_in":time_in, "time_out":time_out, "status":"Present"}
                 present += 1
 
         # calcualte Present and absent Record
@@ -684,7 +688,10 @@ class GetDriverAttendence(ListAPIView):
         # attach DB record in current table which is genereated above
         for i in list(attendance):
             if str(i.current_date) in data['calenader']:
-                data['calenader'][str(i.current_date)] = {"time_in":i.time_in, "time_out":i.time_out, "status":"Present"}
+                time_in = get_time(i.time_in)
+                time_out = get_time(i.time_out)
+
+                data['calenader'][str(i.current_date)] = {"time_in":time_in, "time_out":time_out, "status":"Present"}
                 present += 1
 
         data['Attendance']= {
