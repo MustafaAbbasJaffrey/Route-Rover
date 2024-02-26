@@ -671,11 +671,7 @@ class GetDriverAttendence(ListAPIView):
 
             if current_date > datetime.today():
                 data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
-            else:
-                # If there is saturday or sunday it will not include in the record
-                if current_date.weekday() == 5 or current_date.weekday() == 6:
-                    pass
-                else:
+            elif not(current_date.weekday() == 5 or current_date.weekday() == 6): 
                     # if date is previous date -> status will be absent
                     data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
                     absent += 1
