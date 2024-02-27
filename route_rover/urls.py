@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('auth/', include('django_rest_authentication.authentication.urls')),
     path('chat/', include('django_chat.urls')),
+    path('notification/', include('django_notification.urls')),
     path('user_management/',  include('user_management.urls')),
 ]
 

@@ -22,6 +22,9 @@ from rest_framework.generics import CreateAPIView, ListCreateAPIView, RetrieveAP
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from datetime import datetime, timedelta
+import copy
+
+
 
 
 
@@ -354,14 +357,15 @@ class ProfileView(generics.ListCreateAPIView):
             profile.save()
 
             # Remove previous image from os 
-            os.remove(os.path.join(settings.MEDIA_ROOT,previous_image_path))
+            if(previous_image_path != ""):
+                os.remove(os.path.join(settings.MEDIA_ROOT,previous_image_path))
             
             # update home_address in guardian details
             guardian_detail.home_address = request.data['home_address']
             guardian_detail.save()
 
-        image = request.data.pop('main_image')
-        data = request.data
+
+        data = copy.deepcopy(request.data)
         data['main_image'] = profile.get_main_image()
         # Response Data
         self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": "Profile Data", "data":request.data}
@@ -396,9 +400,7 @@ class ChangePasswordView(APIView):
     
 
 class DrivedDetailView(CreateAPIView):
-    # Its Allow Any for All for just testing purpose
-    # But its allow only for Admin
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     serializer_class = DriveProfileSerializer
     queryset = DriverDetails.objects.all()
 
@@ -502,8 +504,16 @@ class TimeOutView(CreateAPIView):
         time_out = request.data['time_out']
         date_only = datetime.strptime(time_out, "%Y-%m-%d %H:%M:%S").date()
 
-        # Check if driver has time_in ot not
-        if DriverAttendance.objects.filter(Q(driver=driver), Q(current_date=date_only)).exists():
+        attendance = DriverAttendance.objects.filter(Q(driver=driver), Q(current_date=date_only))
+
+        # Check is there time in or not
+        if attendance.exists():
+            # Already Timed out
+            if attendance[0].time_out:
+                self.resp = {"status": False, "status_code":status.HTTP_405_METHOD_NOT_ALLOWED, "message": f"You have already timed out!", "data":""}
+                return Response(self.resp, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            
+            # Time out
             today_attendance = DriverAttendance.objects.filter(driver=driver, current_date=date_only)
             today_attendance.update(time_out=time_out)
         else:
@@ -546,11 +556,8 @@ class GetDriverAttendence(ListAPIView):
             self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Last {request.query_params.get('last')} Driver Attendance", "data":data}
             return Response(self.resp, status=status.HTTP_200_OK)
 
-        present = 0
-        absent = 0
-
         data = {}
-        data['calenader'] = {}
+        data['calenader'] = []
         
         # Check there is any query parameter pass from client or not if not its send current year
         selected_year = int(request.query_params.get('year')) if request.query_params.get('year') != None else datetime.now().year
@@ -561,18 +568,9 @@ class GetDriverAttendence(ListAPIView):
         current_date = start_date
         while current_date <= end_date:
             formatted_date = current_date.strftime("%Y-%m-%d")
-
-            # date is greather than current date -> status will be empty
-            if current_date > datetime.today():
-                data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
-            else:
-                # If there is saturday or sunday status will be holiday
-                if current_date.weekday() == 5 or current_date.weekday() == 6:
-                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Holiday"}
-                else:
-                    # if date is previous date -> status will be absent
-                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
-                    absent += 1
+            # If there is saturday or sunday status will be holiday
+            if not (current_date.weekday() == 5 or current_date.weekday() == 6):
+                data['calenader'].append({"time_in": None, "time_out": None, "date":formatted_date})
             
             current_date += timedelta(days=1)
 
@@ -581,18 +579,12 @@ class GetDriverAttendence(ListAPIView):
         attendance = DriverAttendance.objects.filter(driver=driver)
 
         # attach DB record in current table which is genereated above
-        for i in list(attendance):
-            if str(i.current_date) in data['calenader']:
-                time_in = get_time(i.time_in)
-                time_out = get_time(i.time_out)
-                data['calenader'][str(i.current_date)] = {"time_in":time_in, "time_out":time_out, "status":"Present"}
-                present += 1
+        for i in data["calenader"]:
+            for j in list(attendance):
+                if (i['date'] == j.current_date.strftime("%Y-%m-%d")):
+                    i['time_in'] =  get_time(j.time_in)
+                    i['time_out'] = get_time(j.time_out)
 
-        # calcualte Present and absent Record
-        data['Attendance']= {
-                "Present":present,
-                "Absent":absent         
-            }
 
         self.resp = {"status": True, "status_code":status.HTTP_200_OK, "message": f"Driver Attendance", "data":data}
         return Response(self.resp, status=status.HTTP_200_OK)
@@ -604,8 +596,6 @@ class GetDriverAttendence(ListAPIView):
         This method wont be called if month is not in query parameters
     '''
     def attendance_for_month(self, month=None, year=None):
-        absent = 0
-        present = 0
 
         # If one of the query parameter is not passed in to this method it will because current month and current year
         if month is None:
@@ -617,40 +607,25 @@ class GetDriverAttendence(ListAPIView):
         num_days_in_month = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day
 
         data = {}
-        data['calenader'] = {}
+        data['calenader'] = []
         for day in range(1, num_days_in_month + 1):
             date = datetime(year, month, day)
             formatted_date = date.strftime("%Y-%m-%d")
 
-            # date is greather than current date -> status will be empty
-            if date.date() > datetime.today().date():
-                data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
-            else:
-                # If there is saturday or sunday status will be holiday
-                if date.weekday() == 5 or date.weekday() == 6:
-                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Holiday"}
-                else:
-                    # if date is previous date -> status will be absent
-                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
-                    absent += 1
+            # If there is saturday or sunday status will be holiday
+            if not (date.weekday() == 5 or date.weekday() == 6):
+                data['calenader'].append({"time_in": None, "time_out": None, "date":formatted_date})
 
         # Get attendance record from database
         driver = DriverDetails.objects.get(i_profile=self.request.user.profile)
         attendance = DriverAttendance.objects.filter(driver=driver)
 
         # attach DB record in current table which is genereated above
-        for i in list(attendance):
-            if str(i.current_date) in data['calenader']:
-                time_in = get_time(i.time_in)
-                time_out = get_time(i.time_out)
-                data['calenader'][str(i.current_date)] = {"time_in":time_in, "time_out":time_out, "status":"Present"}
-                present += 1
-
-        # calcualte Present and absent Record
-        data['Attendance']= {
-                "Present":present,
-                "Absent":absent         
-            }
+        for i in data["calenader"]:
+            for j in list(attendance):
+                if (i['date'] == j.current_date.strftime("%Y-%m-%d")):
+                    i['time_in'] =  get_time(j.time_in)
+                    i['time_out'] = get_time(j.time_out)
 
         return data
     
@@ -660,39 +635,40 @@ class GetDriverAttendence(ListAPIView):
     '''
     def attendance_limit(self, limit):
         data = {}
-        data['calenader'] = {}
+        data['calenader'] = []
 
-        present = 0
-        absent = 0
 
+        # Get attendance record from database
+        driver = DriverDetails.objects.get(i_profile=self.request.user.profile)
+        attendance = DriverAttendance.objects.filter(driver=driver).order_by('-id')[:5]
+
+        # Last Five Days Record without Absent
+        # current_date = datetime.today()
+        # for i in list(attendance):
+        #     formatted_date = i.current_date.strftime("%Y-%m-%d")
+
+        #     if not(current_date.weekday() == 5 or current_date.weekday() == 6): 
+        #         time_in = get_time(i.time_in)
+        #         time_out = get_time(i.time_out)
+        #         data['calenader'].append({"time_in": time_in, "time_out": time_out, "date": formatted_date, "status": "Present"})
+        #         absent += 1
+
+        # Last five records with absent as well
         current_date = datetime.today()
         while len(data["calenader"]) < int(limit):
             formatted_date = current_date.strftime("%Y-%m-%d")
 
-            if current_date > datetime.today():
-                data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": ""}
-            elif not(current_date.weekday() == 5 or current_date.weekday() == 6): 
+            if not(current_date.weekday() == 5 or current_date.weekday() == 6): 
                     # if date is previous date -> status will be absent
-                    data['calenader'][formatted_date] = {"time_in": None, "time_out": None, "status": "Absent"}
-                    absent += 1
+                    data['calenader'].append({"time_in": None, "time_out": None, "date": formatted_date})
+
             current_date+=timedelta(days=-1)
         
-        # Get attendance record from database
-        driver = DriverDetails.objects.get(i_profile=self.request.user.profile)
-        attendance = DriverAttendance.objects.filter(driver=driver)
+        for i in data["calenader"]:
+            for j in list(attendance):
+                if (i['date'] == j.current_date.strftime("%Y-%m-%d")):
+                    i['time_in'] =  get_time(j.time_in)
+                    i['time_out'] = get_time(j.time_out)
 
-        # attach DB record in current table which is genereated above
-        for i in list(attendance):
-            if str(i.current_date) in data['calenader']:
-                time_in = get_time(i.time_in)
-                time_out = get_time(i.time_out)
-
-                data['calenader'][str(i.current_date)] = {"time_in":time_in, "time_out":time_out, "status":"Present"}
-                present += 1
-
-        data['Attendance']= {
-            "Present":present,
-            "Absent":absent         
-        }
         return data
         

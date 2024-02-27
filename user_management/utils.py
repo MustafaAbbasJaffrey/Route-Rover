@@ -106,6 +106,10 @@ def compare_dates(date1, date2):
     
 
 def get_time(date_time):
-    formated_date_time = datetime.fromisoformat(str(date_time))            
-    time = formated_date_time.strftime('%I:%M %p') 
+    time = date_time
+    try:
+        formated_date_time = datetime.fromisoformat(str(date_time))            
+        time = formated_date_time.strftime('%I:%M %p') 
+    except:
+        pass
     return time
